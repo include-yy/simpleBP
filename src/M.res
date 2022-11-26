@@ -22,6 +22,7 @@ let vvf2v = (. x, y, f) => {
 let vvadd = (. x, y) => ((. a, b) => a+.b)->vvf2v(. x, y, _)
 let vvsub = (. x, y) => ((. a, b) => a-.b)->vvf2v(. x, y, _)
 let vvmul = (. x, y) => ((. a, b) => a*.b)->vvf2v(. x, y, _)
+let vvdiv = (. x, y) => ((. a, b) => a/.b)->vvf2v(. x, y, _)
 
 let matxvec = (. m, v) => m->Belt.Array.mapU((.mv) => dot(. mv, v))
 

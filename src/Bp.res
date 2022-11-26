@@ -230,6 +230,8 @@ let train_sgd = (su: super, bsize, ~logfn=?, ()) => {
     net
 }
 
+type norm = array<array<(float, float)>>
+
 type normxy = (array<array<float>>, array<array<float>>, array<(float, float)>)
 
 let normv = (. v: array<float>) => {
@@ -260,7 +262,6 @@ let bnforward = (ixs: array<array<float>>, ne: S.net) => {
 	    a
 		->M.matxvec(. ne[i].w, _)
 		->M.vvadd(. _, ne[i].b)
-
 	})
 	let (nom, norms) = axb->normalize
 	let nom2 = nom->Belt.Array.mapU((.v) => {
@@ -272,25 +273,98 @@ let bnforward = (ixs: array<array<float>>, ne: S.net) => {
     })
 }
 
-/*
-  let bnbackward = (ne: net, xynarr: array<normxy>, delta0s: array<array<float>>) => {
+let bnbackward = (ne: S.net, xynarr: array<normxy>, inputVs, delta0s: array<array<float>>) => {
     let len = Js.Array2.length(ne)
-    let ne1 = ne->Belt.Array.slice(~offset=0, ~len=len-1)
+    let ne1 = ne->Belt.Array.slice(~offset=1, ~len=len-1)
     let xynarr1 = xynarr->Belt.Array.slice(~offset=0, ~len=len-1)
-    let deltanas = delta0s->Belt.Array.mapU((.a) => {
+
+    let deltana = delta0s->Belt.Array.mapU((.a) => {
 	a->M.sf2vf(. _, (.x) => x*.ne[len-1].na)
     })
-    let delarrs = Belt.Array.reduceReverse2U(ne1, xynarr1, [deltanas], (. c, a, b) => {
+    let (_, _, v) = xynarr[xynarr->Js.Array2.length-1]
+    let (_, varr) = v->Belt.Array.unzip
+    let deltanava = deltana->Belt.Array.mapU((.a) => {
+	a->M.vvdiv(. _, varr)
+    })
+    let delarrs = Belt.Array.reduceReverse2U(ne1, xynarr1, [deltanava], (. c, a, b) => {
 	let tm_delta_arr = c[0]->Belt.Array.mapU((.t) => M.tmatxvec(. a.w, t))
 	let (xm, ym, normv) = b
 	let dfarrs = xm->Belt.Array.mapWithIndexU((. i, _) => {
 	    let (_, s) = normv->Belt.Array.unzip
-	    let dfmat = a.df(. (xm[i], ym[i]))
+	    a.df(. (xm[i], ym[i]))
 		->M.sf2vf(. _, (.x) => x*.a.na)
-		->M.vvmul(. _, s)
+		->M.vvdiv(. _, s)
 	})
-	let res =
-	    [res]->Belt.Array.concat(c)
+	let darr = tm_delta_arr->Belt.Array.mapWithIndexU((. i, _) => {
+	    M.vvmul(. tm_delta_arr[i], dfarrs[i])
+	})
+	[darr]->Belt.Array.concat(c)
     })
-})
-*/
+    let wbres = ne->S.wbfn2wb((._) => 0.0)
+    let wbs = delarrs->Belt.Array.mapWithIndexU((. i, _) => {
+	if i != 0 {
+	    let (_, ys, _) = xynarr[i-1]
+	    delarrs[i]->Belt.Array.mapWithIndexU((. j, d) => {
+		{S.dw: d->M.vxv2m(. _, ys[j]),
+		 db: d}
+	    })
+	} else {
+	    delarrs[i]->Belt.Array.mapWithIndexU((. j, d) => {
+		{S.dw: d->M.vxv2m(. _, inputVs[j]),
+		 db: d}
+	    })
+	}
+    })
+    wbs->Belt.Array.forEachU((. x) => {
+	S.wbAddInPlace(. wbres, x)
+    })
+    wbres->S.wbmap((.x) => x /. Js.Array2.length(inputVs)->Belt.Int.toFloat)
+}
+
+let bntrain_bgd = (su: super, ~logfun=?, ()) => {
+    let net = S.create(~netarr=su.neta,
+		       ~farr=su.farr,
+		       ~narr=su.narr,
+		       ~initfun=su.initf)->Belt.Result.getExn
+    let len = net->Js.Array2.length
+    let norms = Belt.Array.makeBy(len, (i) => {
+	Belt.Array.make(net[i].b->Js.Array2.length, (0.0, 0.0))
+    })
+    for i in 0 to su.epoch - 1 {
+	let fs = bnforward(su.inputVs, net)
+	let (x, y, _) = fs[len-1]
+	let deltas = x->Belt.Array.mapWithIndexU((. i, _) => {
+	    su.dlossdx((x[i], y[i]), su.outputVs[i])
+	})
+	let costgr = bnbackward(net, fs, su.inputVs, deltas)
+	S.wbfnUpdateInPlace(. net, costgr, su.etainit->su.etafun(. _, i))
+	let curr_norms = fs->Belt.Array.mapU((. a) => {
+	    let (_, _, s) = a
+	    s
+	})
+	M.mmf2mInPlace(. norms, curr_norms, (. x, y) => {
+	    let (a, b) = x
+	    let (c, d) = y
+	    (a +. c, b +. d)
+	})
+	switch logfun {
+		| None => ()
+		| Some(fn) => {
+		    let forwards = fs->Belt.Array.mapU((. a) => {
+			let (x, y, _) = a
+			Belt.Array.zip(x, y)
+		    })->M.tr(. _)
+		    {i: i,
+		     forwards: forwards,
+		     inputs: su.inputVs,
+		     outputs: su.outputVs,
+		     lossfn: su.floss}->fn
+		}
+	}
+    }
+    let norms_final = S.m((. x) => {
+	let (a, b) = x
+	(a /. su.epoch->Belt.Int.toFloat, b /. su.epoch->Belt.Int.toFloat)
+    })(. norms)
+    (net, norms_final)
+}

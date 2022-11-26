@@ -64,12 +64,12 @@ let su1 = {
     neta: [2, 3, 4, 1],
     inputVs: [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.0, 0.0]],
     outputVs: [[1.0], [1.0], [0.0], [0.0]],
-    epoch: 20000,
-    etainit: 0.5
+    epoch: 10000,
+    etainit: 1.0
 }
 
 Js.Console.timeStart("1")
-let r1 = Bp.train_bgd(su1, ~logfn=Bp.log_example, ())
+let r1 = Bp.train_bgd(su1, ())//~logfn=Bp.log_example, ())
 Js.Console.timeEnd("1")
 [1.0, 0.0]->Bp.forward(r1)->((x) => x[x->Js.Array2.length-1])->Js.log
 [1.0, 1.0]->Bp.forward(r1)->((x) => x[x->Js.Array2.length-1])->Js.log
@@ -79,10 +79,29 @@ Js.Console.timeEnd("1")
 //train_sgd
 Js.log("train_sgd")
 Js.Console.timeStart("2")
-let r1 = Bp.train_sgd(su1, 2, ~logfn=Bp.log_example, ())
+let r1 = Bp.train_sgd(su1, 2, ())//~logfn=Bp.log_example, ())
 Js.Console.timeEnd("2")
 [1.0, 0.0]->Bp.forward(r1)->((x) => x[x->Js.Array2.length-1])->Js.log
 [1.0, 1.0]->Bp.forward(r1)->((x) => x[x->Js.Array2.length-1])->Js.log
 [0.0, 1.0]->Bp.forward(r1)->((x) => x[x->Js.Array2.length-1])->Js.log
 [0.0, 0.0]->Bp.forward(r1)->((x) => x[x->Js.Array2.length-1])->Js.log
 
+//bnforward
+Js.log("bnforward")
+let ne1 = S.create(~netarr=[3, 4, 3],
+		   ~farr=[(id, id_d), (id, id_d)],
+		   ~narr=[(0.5, 0.5), (0.5, 0.5)],
+		   ~initfun=(_)=>1.0)->Belt.Result.getExn
+let d1 = [[1.0, 1.0, 1.0],
+	  [2.0, 1.0, 2.0],
+	  [3.0, 3.0, 4.0]]
+
+Bp.bnforward(d1, ne1)->Belt.Array.forEachU((. a) => {
+    let (xs, ys, norms) = a
+    Js.log("x")
+    Js.log(xs)
+    Js.log("y")
+    Js.log(ys)
+    Js.log("norm")
+    Js.log(norms)
+})
