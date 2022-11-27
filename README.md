@@ -21,4 +21,4 @@ node Test.bs.js
 node Mnist.bs.js
 ```
 
-可参考 `Test.bs.js` 和 `Mnist.bs.js` 学习简单用法
+可参考 `Test.res` 和 `Mnist.res` 学习简单用法
