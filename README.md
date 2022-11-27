@@ -1,21 +1,24 @@
-# ReScript Project Template
-
-The only official ReScript starter template.
+# simpleBP -- ReScript 实现的简单 BP 网络
 
 ## Installation
 
 ```sh
+git clone https://github.com/include-yy/simpleBP
+cd simpleBP
 npm install
 ```
+
+前往 [MNIST](http://yann.lecun.com/exdb/mnist/)，下载数据文件，解压后放入 `src` 目录中
 
 ## Build
 
 - Build: `npm run res:build`
-- Clean: `npm run res:clean`
-- Build & watch: `npm run res:start`
 
 ## Run
 
 ```sh
-node src/Demo.bs.js
+node Test.bs.js
+node Mnist.bs.js
 ```
+
+可参考 `Test.bs.js` 和 `Mnist.bs.js` 学习简单用法
